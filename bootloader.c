@@ -1,8 +1,8 @@
 /********************************************************************************
  * 文件名  ：bootloader.c
  * 描述    ：bootloader     
- * 作者    ：泽畔无材  QQ:715805855
- *修改时间 ：2013-10-21
+ * 作者    ：泽畔无材  zepanwucai@gmail.com
+ *修改时间 ：2013-11-18
 **********************************************************************************/
 
 #include "bootloader.h"
@@ -54,7 +54,7 @@ int main(void)
                 goApp:
                 FLASH->IAPSR &= FLASH_MEMTYPE_PROG; //锁住flash
                 //goto app
-                asm("JP $8240");
+                asm("JP $8200");
                 break;
             case BOOT_WRITE:
                 page = UART1_RcvB();
@@ -108,7 +108,7 @@ IN_RAM(void FLASH_ProgBlock(uint8_t * addr, uint8_t *Buffer))
     FLASH->CR2 |= FLASH_CR2_PRG;
     FLASH->NCR2 &= (uint8_t)(~FLASH_NCR2_NPRG);
     /* Copy data bytes from RAM to FLASH memory */
-    for (i = 0; i < FLASH_BLOCK_SIZE; i++)
+    for (i = 0; i < BLOCK_BYTES; i++)
     {
         *((PointerAttr uint8_t*) (uint16_t)addr + i) = ((uint8_t)(Buffer[i]));    
     }
