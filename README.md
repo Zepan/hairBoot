@@ -19,3 +19,9 @@ Build
 3. fix all interrupt vectors except the vecter 0.
    change vector n to 0x82008200 + 4*n, eg vector 1: 82008204
 4. finished! you get the bin/hex/out now~
+
+Related
+-------
+ST-Node: A library and application demos for ST-Node(tiny stm8s moudle)
+
+https://github.com/Zepan/ST-Node.git
