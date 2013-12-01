@@ -23,9 +23,6 @@ int main(void)
                    (uint8_t)((BaudRate_Mantissa >> 4) & (uint8_t)0xF0);  
     UART1->BRR1 |= (uint8_t)BaudRate_Mantissa; 
     UART1->CR2 |= (uint8_t)(UART1_CR2_TEN | UART1_CR2_REN);  //使能收发    
-    //unlock flash,解锁flash
-    FLASH->PUKR = FLASH_RASS_KEY1;
-    FLASH->PUKR = FLASH_RASS_KEY2;
     //bootloader通信过程
     while(i)    
     {
@@ -44,6 +41,9 @@ int main(void)
     }
     else
     {
+        //unlock flash,解锁flash
+        FLASH->PUKR = FLASH_RASS_KEY1;
+        FLASH->PUKR = FLASH_RASS_KEY2;
         UART1_SendB(0xa0|INIT_PAGE);    
         while(1)
         {
