@@ -18,12 +18,14 @@ int main(void)
     //set hsi = 16M,复位后默认hsi
     CLK->CKDIVR &= (uint8_t)(~CLK_CKDIVR_HSIDIV); //清空(00)即不分频
     while(!(CLK->ICKR & 0x02));   //等待内部时钟稳定
+    
     //set baudrate = 115200, 复位后默认开启uart，格式默认，只需设置波特率及使能收发
     UART1->BRR2 |= (uint8_t)((uint8_t)(((BaudRate_Mantissa100 - (BaudRate_Mantissa * 100)) << 4) / 100) & (uint8_t)0x0F) |\
                    (uint8_t)((BaudRate_Mantissa >> 4) & (uint8_t)0xF0);  
     UART1->BRR1 |= (uint8_t)BaudRate_Mantissa; 
     UART1->CR2 |= (uint8_t)(UART1_CR2_TEN | UART1_CR2_REN);  //使能收发    
     //bootloader通信过程
+    
     while(i)    
     {
         if(UART1->SR & (u8)UART1_FLAG_RXNE)    //wait for head 
@@ -31,8 +33,8 @@ int main(void)
             ch = (uint8_t)UART1->DR;    
             if(ch == BOOT_HEAD) break;
         }
-        tryCnt--;
-        if(tryCnt == 0) i--;
+//        tryCnt--;
+//        if(tryCnt == 0) i--;
     }
     
     if(i == 0)
@@ -41,20 +43,40 @@ int main(void)
     }
     else
     {
-        //unlock flash,解锁flash
+        // unlock MAIN PROGRAM area
         FLASH->PUKR = FLASH_RASS_KEY1;
         FLASH->PUKR = FLASH_RASS_KEY2;
+        
         UART1_SendB(0xa0|INIT_PAGE);    
         while(1)
         {
             ch = UART1_RcvB();
             switch(ch)
             {
+            case BOOT_LOCK_UBC:
+                ch = UART1_RcvB();
+                 
+                // unlock DATA EEPROM (where OPT resides)
+                FLASH->DUKR = 0xAE;
+                FLASH->DUKR = 0x56;
+              
+                // unlock the Option Bytes
+                FLASH->CR2 |= FLASH_CR2_OPT;
+                FLASH->NCR2 &= ~FLASH_NCR2_NOPT;
+                
+                // UBC set to `ch` pages
+                OPT->OPT1 = ch;
+                OPT->NOPT1 = ~ch;
+                
+                // lock the option bytes
+                FLASH->CR2 &= ~FLASH_CR2_OPT;
+                FLASH->NCR2 |= FLASH_NCR2_NOPT;
+                break;
             case BOOT_GO:
                 goApp:
                 FLASH->IAPSR &= FLASH_MEMTYPE_PROG; //锁住flash
                 //goto app
-                asm("JP $8200");
+                asm("JP $8300");
                 break;
             case BOOT_WRITE:
                 page = UART1_RcvB();
@@ -72,6 +94,10 @@ int main(void)
                     for(i = 0; i < BLOCK_BYTES; i++)   
                     {
                         verify -= addr[i];
+                        if (addr[i]!=buf[i]) {
+                          verify = 1;
+                          break;
+                        }
                     }
                     if(verify == 0)  //写入校验成功
                     {
