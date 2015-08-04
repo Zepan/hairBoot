@@ -15,6 +15,8 @@ int main(void)
     u8 buf[BLOCK_BYTES];
     u8 verify;
     u8* addr;
+    u8 mainprog_unlocked = 0;
+    
     //set hsi = 16M,复位后默认hsi
     CLK->CKDIVR &= (uint8_t)(~CLK_CKDIVR_HSIDIV); //清空(00)即不分频
     while(!(CLK->ICKR & 0x02));   //等待内部时钟稳定
@@ -26,27 +28,23 @@ int main(void)
     UART1->CR2 |= (uint8_t)(UART1_CR2_TEN | UART1_CR2_REN);  //使能收发    
     //bootloader通信过程
     
-    while(i)    
-    {
-        if(UART1->SR & (u8)UART1_FLAG_RXNE)    //wait for head 
-        {
-            ch = (uint8_t)UART1->DR;    
-            if(ch == BOOT_HEAD) break;
-        }
+//    while(i)
+//    {
+//        if(UART1->SR & (u8)UART1_FLAG_RXNE)    //wait for head 
+//        {
+//            ch = (uint8_t)UART1->DR;    
+//            if(ch == BOOT_HEAD) break;
+//        }
 //        tryCnt--;
 //        if(tryCnt == 0) i--;
-    }
+//    }
     
-    if(i == 0)
-    {    //goto app
-        goto goApp;
-    }
-    else
-    {
-        // unlock MAIN PROGRAM area
-        FLASH->PUKR = FLASH_RASS_KEY1;
-        FLASH->PUKR = FLASH_RASS_KEY2;
-        
+//    if(i == 0)
+//    {    //goto app
+//        goto goApp;
+//    }
+//    else
+    {        
         UART1_SendB(0xa0|INIT_PAGE);    
         while(1)
         {
@@ -73,12 +71,28 @@ int main(void)
                 FLASH->NCR2 |= FLASH_NCR2_NOPT;
                 break;
             case BOOT_GO:
-                goApp:
-                FLASH->IAPSR &= FLASH_MEMTYPE_PROG; //锁住flash
+                if (mainprog_unlocked) {
+                    FLASH->IAPSR &= FLASH_MEMTYPE_PROG; //锁住flash
+                }
                 //goto app
-                asm("JP $8300");
+                typedef void (*fptr_t)();
+                fptr_t fptr;
+                u16 faddr;
+                
+                ch = UART1_RcvB();
+                faddr = ((u16) ch) << 8;
+                ch = UART1_RcvB();
+                faddr = faddr | (u16)ch;
+                fptr = (fptr_t) faddr;
+                fptr();
                 break;
             case BOOT_WRITE:
+                if (!mainprog_unlocked) {
+                    // unlock MAIN PROGRAM area
+                    FLASH->PUKR = FLASH_RASS_KEY1;
+                    FLASH->PUKR = FLASH_RASS_KEY2;
+                    mainprog_unlocked=1;
+                }
                 page = UART1_RcvB();
                 addr = (u8*)(FLASH_START + (page << BLOCK_SHIFT));
                 verify = 0;
