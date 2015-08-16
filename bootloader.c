@@ -7,6 +7,8 @@
 
 #include "bootloader.h"
 
+extern unsigned long int __iar_program_start;
+
 int main(void)
 {
     u16 tryCnt = 65535;
@@ -103,6 +105,25 @@ int main(void)
                 }
                 if(verify == UART1_RcvB())  //通信校验成功
                 {
+                    if (page == 0)
+                    {
+                      unsigned long entrypoint = (unsigned long int)&__iar_program_start;
+                      
+                      verify -= buf[0];
+                      verify -= buf[1];
+                      verify -= buf[2];
+                      verify -= buf[3];
+                      
+                      buf[0] = 0x82;
+                      buf[1] = 0x00;
+                      buf[2] = (entrypoint >> 8) & 0xFF;
+                      buf[3] = (entrypoint & 0xFF);
+                      
+                      verify += buf[0];
+                      verify += buf[1];
+                      verify += buf[2];
+                      verify += buf[3];
+                    }                  
                     FLASH_ProgBlock(addr, buf);
                     //verify flash 
                     for(i = 0; i < BLOCK_BYTES; i++)   
