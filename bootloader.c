@@ -47,7 +47,6 @@ int main(void)
 //    }
 //    else
     {        
-        UART1_SendB(0xa0|INIT_PAGE);    
         while(1)
         {
             ch = UART1_RcvB();
@@ -86,6 +85,7 @@ int main(void)
                 ch = UART1_RcvB();
                 faddr = faddr | (u16)ch;
                 fptr = (fptr_t) faddr;
+                UART1_SendB(BOOT_OK);
                 fptr();
                 break;
             case BOOT_WRITE:
