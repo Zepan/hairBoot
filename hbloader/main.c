@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
 	err = 0;
 	do {
 		cmd = 0;
+		resp = (char) ~RESP_ACK;
 		nbytes = read(STDIN, &cmd, 1);
 		if (nbytes < 0) {
 			perror("failed to read command from stdin");
