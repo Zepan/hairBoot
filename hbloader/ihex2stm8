@@ -1,0 +1,157 @@
+#!/bin/bash
+
+# Converts an Intel HEX file (on stdin) to a sequence of commands for the "hairBoot" STM8 bootloader:
+#
+#   BN DD DD DD DD .. DD CS
+#
+# where:
+#   BN       - is a block number (hex format)
+#   DD .. DD - is a chunk of 64 bytes (128 hex characters)
+#   CS       - is the checksum of the data
+#
+# See also: https://github.com/eyesight-tech/hairBoot
+
+set -e
+
+# number of bytes in a block.
+# The STM8 bootloader can only write whole blocks
+BLOCK_SIZE=64
+
+FLASH_START=0x8000
+
+CMD_WRITE=a7
+CMD_JUMP=a9
+
+function log {
+	echo >&2 "$0: $*"
+}
+
+function warn {
+	echo >&2 "$0: warning: $*"
+}
+
+function die {
+	echo >&2 "$0: $*"
+	exit 1
+}
+
+function pad_last_block {
+	for i in $(seq $last_block_bytes $(($BLOCK_SIZE-1))); do
+		printf '\x00'
+	done
+
+	# mark last block as complete
+	last_block_bytes=$BLOCK_SIZE
+}
+
+function complete_last_block {
+	# terminate block with a checksum (in hex characters)
+	printf "\x$(printf "%x" $block_checksum)"
+}
+
+linenum=1
+eof_reached=0
+last_block_bytes=0
+last_block_num=
+
+while [[ $eof_reached -eq 0 ]]; do
+
+	# read Intel HEX record
+	read -n 1 start_code; [[ "$start_code" == ":" ]] || die "no start code (:) in line $linenum"
+	read -n 2 byte_count; [[ $(echo "$byte_count" | grep -c '[0-9A-F][0-9A-F]') -eq 1 ]] || die "bad byte count ($byte_count) in line $linenum"
+	read -n 4 address;    [[ $(echo "$address" | grep -c '[0-9A-F][0-9A-F][0-9A-F][0-9A-F]') -eq 1 ]] || die "bad address ($address) in line $linenum"
+	read -n 2 rec_type;   [[ $(echo "$rec_type" | grep -c '[0-9A-F][0-9A-F]') -eq 1 ]] || die "bad record type ($rec_type) in line $linenum"
+
+	# read data (if any)
+	byte_count_dec=$((0x$byte_count))
+	if [[ $byte_count_dec -gt 0 ]]; then
+		read -n $(($byte_count_dec * 2)) data
+	else
+		data=
+	fi
+
+	read -n 2 checksum
+	# the checksum in IHEX is calculated on the entire record (incuding type and address). We need the checksum
+	# of the data alone
+	checksum=0
+	for b in $(echo $data | sed -e 's|\(..\)|\1\n|g'); do
+		checksum=$(($checksum + 0x$b))
+		checksum=$(($checksum&0xff)) # take LSB
+	done
+
+	read eol
+
+	# calculate the block number (each block is 64 bytes)
+	flash_offset=$((0x$address - $FLASH_START))
+	block_num=$(($flash_offset / $BLOCK_SIZE))
+
+	case $rec_type in
+		00) # Data
+
+			if [[ -z $last_block_num ]]; then
+				# first DATA record ever
+
+				last_block_num=$block_num
+				last_block_bytes=$byte_count_dec
+				block_checksum=$checksum
+
+				printf "\x$CMD_WRITE\x$(printf "%x" $block_num)"
+				for b in $(echo $data | sed -e 's:\(..\):\1\n:g'); do
+					printf "\x$b"
+				done
+			elif [[ $block_num -eq $last_block_num ]]; then
+				# continuing previous block
+
+				last_block_bytes=$(($last_block_bytes + $byte_count_dec))
+				block_checksum=$(( ($block_checksum + $checksum)&0xff ))
+
+				for b in $(echo $data | sed -e 's:\(..\):\1\n:g'); do
+					printf  "\x$b"
+				done
+			else
+				# moved to new block
+
+				if [[ $last_block_bytes -lt $BLOCK_SIZE ]]; then
+					pad_last_block
+				fi
+
+				complete_last_block
+
+				# and start a new one
+				last_block_bytes=$byte_count_dec
+				last_block_num=$block_num
+				block_checksum=$checksum
+
+				printf "\x$CMD_WRITE\x$(printf "%x" $block_num)"
+				for b in $(echo $data | sed -e 's:\(..\):\1\n:g'); do
+					printf "\x$b"
+				done
+			fi
+			;;
+		01) # End Of File
+			if [[ $last_block_bytes -lt $BLOCK_SIZE ]]; then
+				pad_last_block
+				complete_last_block
+			fi
+			eof_reached=1
+			;;
+		05) # Start Linear Address
+			if [[ $last_block_bytes -lt $BLOCK_SIZE ]]; then
+				pad_last_block
+				complete_last_block
+			fi
+			jumpaddr=$(printf "%x" $((0x$data&0xffff)))
+			printf "\x$CMD_JUMP"
+			for b in $(echo $jumpaddr | sed -e 's:\(..\):\1\n:g'); do
+				printf "\x$b"
+			done
+			;;
+		*)  die "bad record type ($rec_type) in line $linenum"
+			;;
+	esac
+
+	linenum=$(($linenum+1))
+done
+
+exit 0
+
