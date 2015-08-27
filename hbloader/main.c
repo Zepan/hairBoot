@@ -61,6 +61,34 @@ void setup_serial(int fd) {
 
 }
 
+int listenToPort(int _SerialFileDescriptor){
+	int num_of_tries = 3;
+	int try = 0;
+	int err = 1;
+	int res;
+    struct timeval Timeout;
+    int    maxfd;     /* maximum file desciptor used */
+    fd_set readfs; 
+	maxfd = _SerialFileDescriptor+1;
+	FD_SET(_SerialFileDescriptor, &readfs);  /* set testing for source  */
+	/* set timeout value within input loop */
+    Timeout.tv_usec = 0;  /* milliseconds */
+    Timeout.tv_sec  = 2;  /* seconds */
+    while(try < num_of_tries){
+    	res = select(maxfd, &readfs, NULL, NULL, &Timeout);
+    	if( (0 == res)||(-1 == res) ) {
+   	 		fprintf(stderr, "error reading byte\n");
+    	}else{
+    		if(FD_ISSET(_SerialFileDescriptor, &readfs)){
+				err = 0;
+				break;
+			}
+    	}
+    	try++;
+    }
+    return err;
+}
+
 int main(int argc, char** argv) {
 	char* devpath;
 	int devfd;
@@ -126,7 +154,10 @@ int main(int argc, char** argv) {
 				break;
 			}
 
-			read(devfd, &resp, 1);
+			if(0 == listenToPort(devfd)){
+				read(devfd, &resp, 1);
+			}
+
 			if (resp != RESP_ACK) {
 				fprintf(stderr, "failed to write page %d to device (got 0x%02x)\n", page, resp);
 				err = 1;
@@ -151,7 +182,10 @@ int main(int argc, char** argv) {
 				break;
 			}
 
-			read(devfd, &resp, 1);
+			if(0 == listenToPort(devfd)){
+				read(devfd, &resp, 1);
+			}
+
 			if (resp != RESP_ACK) {
 				fprintf(stderr, "failed to write jump command to device (got 0x%x)\n", resp);
 				err = 1;
