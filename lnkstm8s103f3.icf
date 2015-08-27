@@ -16,11 +16,11 @@ define region NearData = [from 0x0000 to 0x03FF];
 
 define region Eeprom = [from 0x4000 to 0x427F];
 
-define region NearFuncCode = [from 0x8000 to 0x9FFF];
+define region NearFuncCode = [from 0x8000 to 0x8300];
 
-define region FarFuncCode = [from 0x8000 to 0x9FFF];
+define region FarFuncCode = [from 0x8000 to 0x8300];
 
-define region HugeFuncCode = [from 0x8000 to 0x9FFF];
+define region HugeFuncCode = [from 0x8000 to 0x8300];
 
 
 /////////////////////////////////////////////////////////////////

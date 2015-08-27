@@ -25,6 +25,7 @@
 #define BOOT_WRITE 0xa7
 #define BOOT_VERIFY 0xa8
 #define BOOT_GO 0xa9
+#define BOOT_LOCK_UBC 0xaa
 
 //uart parameter
 #define SYSCLK 16000000
